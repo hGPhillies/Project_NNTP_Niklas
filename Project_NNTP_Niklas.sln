@@ -5,6 +5,10 @@ VisualStudioVersion = 17.14.36603.0 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Project_NNTP_Niklas", "Project_NNTP_Niklas.csproj", "{8CE6DBA8-8535-4A15-8C84-288E899EC70A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConnectionSpikeNiklas", "..\ConnectionSpikeNiklas\ConnectionSpikeNiklas.csproj", "{096D2308-949B-4B7F-82E7-2858CE5D3FDC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Spike_Authentication", "..\Spike_Authentication\Spike_Authentication.csproj", "{F53BE58C-3B70-4AE2-BB24-D9E502D56BF9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +19,14 @@ Global
 		{8CE6DBA8-8535-4A15-8C84-288E899EC70A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8CE6DBA8-8535-4A15-8C84-288E899EC70A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8CE6DBA8-8535-4A15-8C84-288E899EC70A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{096D2308-949B-4B7F-82E7-2858CE5D3FDC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{096D2308-949B-4B7F-82E7-2858CE5D3FDC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{096D2308-949B-4B7F-82E7-2858CE5D3FDC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{096D2308-949B-4B7F-82E7-2858CE5D3FDC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F53BE58C-3B70-4AE2-BB24-D9E502D56BF9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F53BE58C-3B70-4AE2-BB24-D9E502D56BF9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F53BE58C-3B70-4AE2-BB24-D9E502D56BF9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F53BE58C-3B70-4AE2-BB24-D9E502D56BF9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
