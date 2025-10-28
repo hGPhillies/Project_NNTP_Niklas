@@ -1,5 +1,4 @@
-﻿using System.Text;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -17,7 +16,6 @@ namespace Project_NNTP_Niklas
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            
         }
 
         // Wire this method to your button's Click in XAML (Click="BtnLogin_Click")
@@ -28,25 +26,9 @@ namespace Project_NNTP_Niklas
 
             try
             {
-                // Read username/password from UI controls.
-                // Ensure your XAML TextBox/PasswordBox use these names (x:Name="TxtUsername" and x:Name="TxtPassword")
-                string username = string.Empty;
-                string password = string.Empty;
-
-                var usernameBox = this.FindName("TxtUsername") as TextBox;
-                if (usernameBox != null) username = usernameBox.Text;
-
-                // Prefer PasswordBox for passwords to avoid plain-text binding in UI
-                var passwordBox = this.FindName("TxtPassword") as PasswordBox;
-                if (passwordBox != null) password = passwordBox.Password;
-                else
-                {
-                    // Fallback to a TextBox named TxtPassword if you used one
-                    var passwordText = this.FindName("TxtPassword") as TextBox;
-                    if (passwordText != null) password = passwordText.Text;
-                }
-
-                username = username?.Trim() ?? string.Empty;
+                // Read username/password from the named controls in XAML
+                string username = txtUsername?.Text?.Trim() ?? string.Empty;
+                string password = txtPassword?.Password ?? string.Empty;
 
                 if (string.IsNullOrEmpty(username))
                 {
@@ -60,26 +42,53 @@ namespace Project_NNTP_Niklas
                     return;
                 }
 
+                // Save credentials in Application.Properties for later reuse (in-memory only)
+                Application.Current.Properties["NntpUsername"] = username;
+                Application.Current.Properties["NntpPassword"] = password;
+
                 var host = "news.sunsite.dk";
                 var port = 119;
 
                 var connector = new ConnectionAndAuthentication();
                 var result = await connector.AuthenticateAsync(host, port, username, password, timeoutMs: 5000);
 
-                // Show server greeting + final message for context
-                var title = result.Success ? "Login succeeded" : "Login failed";
-                var content = result.Message;
+                // Update UI with result
+                txtStatus.Text = result.Message;
                 if (!string.IsNullOrWhiteSpace(result.ServerGreeting))
                 {
-                    content = $"Server greeting: {result.ServerGreeting}\n\n{content}";
+                    txtStatus.Text = $"Server greeting: {result.ServerGreeting}\n{result.Message}";
                 }
 
-                MessageBox.Show(content, title, MessageBoxButton.OK, result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                var title = result.Success ? "Login succeeded" : "Login failed";
+                MessageBox.Show(txtStatus.Text, title, MessageBoxButton.OK, result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+
+                // Clear PasswordBox UI (we still keep the password in-memory in Application.Properties briefly)
+                txtPassword.Clear();
+
+                if (result.Success)
+                {
+                    // Open NewsDisplay and pass saved credentials; make it the application's main window
+                    var newsWindow = new NewsDisplay(username, password, result.ServerGreeting ?? string.Empty);
+                    Application.Current.MainWindow = newsWindow;
+                    newsWindow.Show();
+
+                    // Close the login window
+                    this.Close();
+                }
+                else
+                {
+                    // On failed authentication we keep credentials in Application.Properties so the user can retry/list groups.
+                    // Consider removing the stored password on user cancel or logout.
+                }
             }
             finally
             {
                 if (button != null) button.IsEnabled = true;
             }
+        }
+
+        private void txtUsername_TextChanged(object sender, TextChangedEventArgs e)
+        {
         }
     }
 }
