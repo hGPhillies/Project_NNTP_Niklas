@@ -27,6 +27,7 @@ namespace Project_NNTP_Niklas
         public record ListGroupsResult(bool Success, string Message, string ServerGreeting, string LastResponse, string[]? Groups);
         public record GroupArticlesResult(bool Success, string Message, string ServerGreeting, string LastResponse, string[]? ArticleNumbers);
         public record ArticleHeadersResult(bool Success, string Message, string ServerGreeting, string LastResponse, string[]? Headers);
+        public record ArticleBodyResult(bool Success, string Message, string ServerGreeting, string LastResponse, string[]? Body);
 
         /// <summary>
         /// Connects to an NNTP server and performs AUTHINFO USER / PASS if a username is supplied.
@@ -175,7 +176,7 @@ namespace Project_NNTP_Niklas
         /// - ListGroupsResult.Success true with Groups[] containing the raw LIST lines (each line typically: "group high low posting")
         /// - On timeout, unexpected replies or exceptions the method returns Success = false and includes messages for diagnostics.
         /// </summary>
-        public async Task<ListGroupsResult> GetNewsgroupsAsync(string host, int port, string? username = null, string? password = null, int timeoutMs = 5000)
+        public async Task<ListGroupsResult> NewsgroupService(string host, int port, string? username = null, string? password = null, int timeoutMs = 5000)
         {
             if (string.IsNullOrWhiteSpace(host)) throw new ArgumentNullException(nameof(host));
             if (port <= 0) throw new ArgumentOutOfRangeException(nameof(port));
@@ -323,7 +324,7 @@ namespace Project_NNTP_Niklas
         /// Usage:
         /// - The caller may then call HEAD <number> or ARTICLE <number> with the returned article numbers.
         /// </summary>
-        public async Task<GroupArticlesResult> GetArticlesForGroupAsync(string host, int port, string group, string? username = null, string? password = null, int timeoutMs = 5000)
+        public async Task<GroupArticlesResult>  GetArticlesForGroupAsync(string host, int port, string group, string? username = null, string? password = null, int timeoutMs = 5000)
         {
             if (string.IsNullOrWhiteSpace(host)) throw new ArgumentNullException(nameof(host));
             if (port <= 0) throw new ArgumentOutOfRangeException(nameof(port));
@@ -562,6 +563,149 @@ namespace Project_NNTP_Niklas
             catch (Exception ex)
             {
                 return new ArticleHeadersResult(false, $"Exception: {ex.Message}", string.Empty, string.Empty, null);
+            }
+            finally
+            {
+                if (client != null)
+                {
+                    try { client.Close(); } catch { }
+                    client.Dispose();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Retrieve the full article (headers + body) for a numeric article id (one-shot connection).
+        /// Uses "ARTICLE <number>" and returns the full article lines (multiline terminated by ".").
+        /// 
+        /// Expected server reply:
+        /// - 220 indicates the start of the article block (headers + blank line + body).
+        /// - The method reads the multiline block until the terminating "." line and returns its lines.
+        /// 
+        /// Dot-stuffing:
+        /// - Lines beginning with ".." are un-stuffed to start with a single '.'.
+        /// 
+        /// Authentication:
+        /// - Optional AUTHINFO USER/PASS is performed if username provided (same pattern as other methods).
+        /// </summary>
+        public async Task<ArticleBodyResult> GetArticleAsync(string host, int port, string articleNumber, string? username = null, string? password = null, string? group = null, int timeoutMs = 5000)
+        {
+            if (string.IsNullOrWhiteSpace(host)) throw new ArgumentNullException(nameof(host));
+            if (port <= 0) throw new ArgumentOutOfRangeException(nameof(port));
+            if (string.IsNullOrWhiteSpace(articleNumber)) throw new ArgumentNullException(nameof(articleNumber));
+
+            TcpClient? client = null;
+            try
+            {
+                client = new TcpClient();
+                var connectTask = client.ConnectAsync(host, port);
+                var completed = await Task.WhenAny(connectTask, Task.Delay(timeoutMs)).ConfigureAwait(false);
+                if (completed != connectTask)
+                {
+                    return new ArticleBodyResult(false, "Connection timed out.", string.Empty, string.Empty, null);
+                }
+
+                if (!client.Connected)
+                {
+                    return new ArticleBodyResult(false, "Failed to connect.", string.Empty, string.Empty, null);
+                }
+
+                using NetworkStream ns = client.GetStream();
+                ns.ReadTimeout = timeoutMs;
+
+                using var reader = new StreamReader(ns, Encoding.ASCII, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
+                using var writer = new StreamWriter(ns, Encoding.ASCII, bufferSize: 1024, leaveOpen: true)
+                {
+                    NewLine = "\r\n",
+                    AutoFlush = true
+                };
+
+                // Greeting
+                string? greeting = await ReadLineWithTimeoutAsync(reader, timeoutMs).ConfigureAwait(false);
+                var lastResponse = greeting ?? string.Empty;
+
+                // Optional auth
+                if (!string.IsNullOrWhiteSpace(username))
+                {
+                    await writer.WriteLineAsync($"AUTHINFO USER {username}").ConfigureAwait(false);
+                    string? resp1 = await ReadLineWithTimeoutAsync(reader, timeoutMs).ConfigureAwait(false);
+                    lastResponse = resp1 ?? string.Empty;
+                    if (resp1 == null)
+                    {
+                        return new ArticleBodyResult(false, "No response after AUTHINFO USER (timeout).", greeting ?? string.Empty, lastResponse, null);
+                    }
+
+                    if (resp1.StartsWith("381"))
+                    {
+                        await writer.WriteLineAsync($"AUTHINFO PASS {password ?? string.Empty}").ConfigureAwait(false);
+                        string? resp2 = await ReadLineWithTimeoutAsync(reader, timeoutMs).ConfigureAwait(false);
+                        lastResponse = resp2 ?? string.Empty;
+                        if (resp2 == null)
+                        {
+                            return new ArticleBodyResult(false, "No response after AUTHINFO PASS (timeout).", greeting ?? string.Empty, lastResponse, null);
+                        }
+                        if (!resp2.StartsWith("281"))
+                        {
+                            return new ArticleBodyResult(false, $"Authentication failed: {resp2}", greeting ?? string.Empty, resp2 ?? string.Empty, null);
+                        }
+                    }
+                    else if (!resp1.StartsWith("281"))
+                    {
+                        return new ArticleBodyResult(false, $"Unexpected server reply after AUTHINFO USER: {resp1}", greeting ?? string.Empty, resp1 ?? string.Empty, null);
+                    }
+                }
+
+                // If caller supplied a group, select it in this session — necessary when using numeric article IDs.
+                if (!string.IsNullOrWhiteSpace(group))
+                {
+                    await writer.WriteLineAsync($"GROUP {group}").ConfigureAwait(false);
+                    string? groupResp = await ReadLineWithTimeoutAsync(reader, timeoutMs).ConfigureAwait(false);
+                    lastResponse = groupResp ?? lastResponse;
+                    if (groupResp == null)
+                    {
+                        return new ArticleBodyResult(false, "No response to GROUP (timeout).", greeting ?? string.Empty, lastResponse, null);
+                    }
+
+                    if (!groupResp.StartsWith("211"))
+                    {
+                        return new ArticleBodyResult(false, $"GROUP failed: {groupResp}", greeting ?? string.Empty, lastResponse, null);
+                    }
+                }
+
+                // ARTICLE <articleNumber>
+                await writer.WriteLineAsync($"ARTICLE {articleNumber}").ConfigureAwait(false);
+                string? artResp = await ReadLineWithTimeoutAsync(reader, timeoutMs).ConfigureAwait(false);
+                lastResponse = artResp ?? lastResponse;
+
+                if (artResp == null)
+                {
+                    return new ArticleBodyResult(false, "No response to ARTICLE (timeout).", greeting ?? string.Empty, lastResponse, null);
+                }
+
+                // 220 indicates start of article
+                if (!artResp.StartsWith("220"))
+                {
+                    return new ArticleBodyResult(false, $"ARTICLE failed: {artResp}", greeting ?? string.Empty, lastResponse, null);
+                }
+
+                var body = new List<string>();
+                while (true)
+                {
+                    var line = await ReadLineWithTimeoutAsync(reader, timeoutMs).ConfigureAwait(false);
+                    if (line == null)
+                    {
+                        return new ArticleBodyResult(false, "Timeout while reading ARTICLE body.", greeting ?? string.Empty, lastResponse, null);
+                    }
+                    if (line == ".") break;
+                    if (line.StartsWith("..")) line = line.Substring(1);
+                    body.Add(line);
+                }
+
+                return new ArticleBodyResult(true, "ARTICLE succeeded.", greeting ?? string.Empty, lastResponse, body.ToArray());
+            }
+            catch (Exception ex)
+            {
+                return new ArticleBodyResult(false, $"Exception: {ex.Message}", string.Empty, string.Empty, null);
             }
             finally
             {

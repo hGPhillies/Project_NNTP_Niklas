@@ -15,6 +15,9 @@ namespace Project_NNTP_Niklas
         private readonly string? _password; // kept until window closes
         private readonly string _serverGreeting;
 
+        // track currently selected group so we can select it in the ARTICLE request
+        private string? _currentGroup;
+
         // default NNTP host/port used by your login flow
         private const string DefaultHost = "news.sunsite.dk";
         private const int DefaultPort = 119;
@@ -45,7 +48,7 @@ namespace Project_NNTP_Niklas
             txtGreeting.Text = "Fetching newsgroups...";
 
             var connector = new ConnectionAndAuthentication();
-            var result = await connector.GetNewsgroupsAsync(DefaultHost, DefaultPort, username: _username, password: _password, timeoutMs: 7000);
+            var result = await connector.NewsgroupService(DefaultHost, DefaultPort, username: _username, password: _password, timeoutMs: 7000);
 
             if (!result.Success)
             {
@@ -78,6 +81,9 @@ namespace Project_NNTP_Niklas
         {
             var selected = lstGroups.SelectedItem as string;
             if (string.IsNullOrWhiteSpace(selected)) return;
+
+            // store current group for later article requests
+            _currentGroup = selected;
 
             txtGreeting.Text = $"Loading articles for {selected}...";
             lstArticles.ItemsSource = null;
@@ -115,27 +121,34 @@ namespace Project_NNTP_Niklas
             var selected = lstArticles.SelectedItem as string;
             if (string.IsNullOrWhiteSpace(selected)) return;
 
-            txtArticle.Text = "Fetching headers...";
-            txtGreeting.Text = $"Fetching headers for article {selected}...";
+            txtArticle.Text = "Fetching article...";
+            txtGreeting.Text = $"Fetching article {selected}...";
 
             var connector = new ConnectionAndAuthentication();
-            var headersResult = await connector.GetArticleHeadersAsync(DefaultHost, DefaultPort, selected.Trim(), username: _username, password: _password, timeoutMs: 8000);
+            // Pass the currently selected group so the server accepts numeric article IDs.
+            var articleResult = await connector.GetArticleAsync(DefaultHost, DefaultPort, selected.Trim(), username: _username, password: _password, group: _currentGroup, timeoutMs: 10000);
 
-            if (!headersResult.Success)
+            if (!articleResult.Success)
             {
-                txtArticle.Text = $"Failed to fetch headers: {headersResult.Message}";
-                if (!string.IsNullOrWhiteSpace(headersResult.ServerGreeting))
+                txtArticle.Text = $"Failed to fetch article: {articleResult.Message}";
+                if (!string.IsNullOrWhiteSpace(articleResult.ServerGreeting))
                 {
-                    txtGreeting.Text = $"Server greeting: {headersResult.ServerGreeting}";
+                    txtGreeting.Text = $"Server greeting: {articleResult.ServerGreeting}";
                 }
                 return;
             }
 
-            txtArticle.Text = (headersResult.Headers is null || headersResult.Headers.Length == 0)
-                ? "(no headers returned)"
-                : string.Join(Environment.NewLine, headersResult.Headers);
+            if (articleResult.Body is null || articleResult.Body.Length == 0)
+            {
+                txtArticle.Text = "(no article body returned)";
+            }
+            else
+            {
+                // Show full article (headers + blank line + body) — preserve server-newlines
+                txtArticle.Text = string.Join(Environment.NewLine, articleResult.Body);
+            }
 
-            txtGreeting.Text = $"Showing headers for article {selected}.";
+            txtGreeting.Text = $"Showing article {selected}.";
         }
 
         private void NewsDisplay_Closed(object? sender, EventArgs e)
