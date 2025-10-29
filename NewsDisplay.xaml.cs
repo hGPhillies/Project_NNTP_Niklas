@@ -48,7 +48,7 @@ namespace Project_NNTP_Niklas
             txtGreeting.Text = "Fetching newsgroups...";
 
             var connector = new ConnectionAndAuthentication();
-            var result = await connector.NewsgroupService(DefaultHost, DefaultPort, username: _username, password: _password, timeoutMs: 7000);
+            var result = await connector.GetNewsgroupsAsync(DefaultHost, DefaultPort, username: _username, password: _password, timeoutMs: 7000);
 
             if (!result.Success)
             {
@@ -65,7 +65,7 @@ namespace Project_NNTP_Niklas
 
             if (result.Groups is null || result.Groups.Length == 0)
             {
-                        lstGroups.ItemsSource = new[] { "(no groups returned)" };
+                lstGroups.ItemsSource = new[] { "(no groups returned)" };
                 return;
             }
 
