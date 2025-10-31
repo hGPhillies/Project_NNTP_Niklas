@@ -6,9 +6,7 @@ using System.Linq;
 
 namespace Project_NNTP_Niklas
 {
-    /// <summary>
-    /// Interaction logic for NewsDisplay.xaml
-    /// </summary>
+ 
     public partial class NewsDisplay : Window
     {
         private readonly string _username;
@@ -48,7 +46,7 @@ namespace Project_NNTP_Niklas
             txtGreeting.Text = "Fetching newsgroups...";
 
             var connector = new ConnectionAndAuthentication();
-            var result = await connector.GetNewsgroupsAsync(DefaultHost, DefaultPort, username: _username, password: _password, timeoutMs: 7000);
+            var result = await connector.NewsgroupService(DefaultHost, DefaultPort, username: _username, password: _password, timeoutMs: 7000);
 
             if (!result.Success)
             {
@@ -153,11 +151,7 @@ namespace Project_NNTP_Niklas
 
         private void NewsDisplay_Closed(object? sender, EventArgs e)
         {
-            // Clear sensitive in-memory password
-            // (if you used Application.Current.Properties, clear that there too)
-            // Note: strings cannot be fully zeroed in managed memory; use SecureString for stronger protection.
-            // For now just drop the reference:
-            // _password is readonly in this type; if you expect to zero it, change to non-readonly field.
+         
         }
     }
 }
